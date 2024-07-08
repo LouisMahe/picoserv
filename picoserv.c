@@ -69,18 +69,20 @@ void	acceptClient(int hostfd)
 	int	len;
 	if (newfd < 0)
 		return ;
+	if (newfd > maxfd)
+		maxfd = newfd;
 	clients[newfd].id = maxid;
 	maxid++;
 	clients[newfd].buffer[0] = 0;
+	FD_SET(newfd, &allset);
 	for (int fd = 0; fd <= maxfd; fd++)
 	{
-		if (FD_ISSET(fd, &allset) && fd != hostfd)
+		if (FD_ISSET(fd, &allset) && fd != hostfd && fd != newfd)
 		{
 			len = strlen(clients[fd].buffer);
-			sprintf(&clients[fd].buffer[len], "server: client %d just arrived\n", maxid);
+			sprintf(&(clients[fd].buffer[len]), "server: client %d just arrived\n", clients[newfd].id);
 		}
 	}
-	FD_SET(newfd, &allset);
 }
 
 int	exctractline(char *message, char *line)
@@ -99,9 +101,12 @@ void	acceptMessage(int recvfd, int hostfd)
 	int	nread;
 	int len;
 	char	line[64000];
+	message[0] = 0;
 	nread = recv(recvfd, &message[0], 64000, 0);
-	if (nread < 0)
+	message[nread] = 0;
+	if (nread <= 0)
 	{
+		printf("client %d left", clients[recvfd].id);
 		for ( int fd = 0; fd <= maxfd; fd++)
 		{
 			if (FD_ISSET(fd, &allset) && fd != hostfd && fd != recvfd)
@@ -111,6 +116,11 @@ void	acceptMessage(int recvfd, int hostfd)
 			}
 		}
 		FD_CLR(recvfd, &allset);
+		FD_CLR(recvfd, &recset);
+		FD_CLR(recvfd, &sendset);
+		clients[recvfd].id = -1;
+		clients[recvfd].buffer[0] = 0;
+		clients[recvfd].stash[0] = 0;
 		close (recvfd);
 	}
 	else{
@@ -138,7 +148,8 @@ void	sendMessages(int hostfd)
 
 int	main(int ac, char **av)
 {
-	int port = 8000;
+	int port = 8002;
+	message[0] = 0;
 	(void)av;
 	if (ac != 2){
 		//printf("please provide a port\n");
@@ -163,7 +174,7 @@ int	main(int ac, char **av)
 		exit(1);
 	}
 	setSets(hostfd);
-	printf("launching loop\n");
+	listen(hostfd, 10);
 	while (1)
 	{
 		recset = sendset = allset;
